@@ -244,8 +244,8 @@ class Condition
             } else {
                 $this->_action = (function (Builder $query) use ($method, $methodArgs, $prop): Builder {
                     array_unshift($methodArgs, $prop($query
-                            ->getModel()
-                            ->getTable() . '.' . $this->param));
+                        ->getModel()
+                        ->getTable() . '.' . $this->param));
                     return $query->{$method}(...$methodArgs);
                 })->bindTo($this);
             }
