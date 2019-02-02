@@ -236,8 +236,8 @@ class Condition
                 $this->_action = (function (Builder $builder) use ($method, $methodArgs, $prop): Builder {
                     return $builder->whereHas($this->_relation, function (Builder $query) use ($method, $methodArgs, $prop): void {
                         array_unshift($methodArgs, $prop($query
-                                ->getModel()
-                                ->getTable() . '.' . $this->_field));
+                            ->getModel()
+                            ->getTable() . '.' . $this->_field));
                         $query->{$method}(...$methodArgs);
                     });
                 })->bindTo($this);
