@@ -184,13 +184,13 @@ class Condition
             case self::TYPE_EQUAL:
                 break;
             case self::TYPE_LIKE:
-                $methodArgs = [DB::raw('LOWER("%' . $this->value . '%")')];
+                $methodArgs = [DB::raw('LOWER(\'%' . $this->value . '%\')')];
                 break;
             case self::TYPE_LIKE_LEFT:
-                $methodArgs = [DB::raw('LOWER("%' . $this->value . '")')];
+                $methodArgs = [DB::raw('LOWER(\'%' . $this->value . '\')')];
                 break;
             case self::TYPE_LIKE_RIGHT:
-                $methodArgs = [DB::raw('LOWER("' . $this->value . '%")')];
+                $methodArgs = [DB::raw('LOWER(\'' . $this->value . '%\')')];
                 break;
             case self::TYPE_IN_ARRAY:
                 $method = 'whereIn';
