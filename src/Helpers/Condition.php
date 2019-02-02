@@ -242,9 +242,11 @@ class Condition
                     });
                 })->bindTo($this);
             } else {
-                $this->_action = (function (Builder $builder) use ($method, $methodArgs, $prop): Builder {
-                    array_unshift($methodArgs, $prop($this->param));
-                    return $builder->{$method}(...$methodArgs);
+                $this->_action = (function (Builder $query) use ($method, $methodArgs, $prop): Builder {
+                    array_unshift($methodArgs, $prop($query
+                            ->getModel()
+                            ->getTable() . '.' . $this->param));
+                    return $query->{$method}(...$methodArgs);
                 })->bindTo($this);
             }
         }
