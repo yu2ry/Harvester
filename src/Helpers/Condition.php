@@ -16,6 +16,24 @@ use Illuminate\Database\Eloquent\Builder;
  */
 class Condition
 {
+    const TYPE_UNKNOWN = 'unknown';
+    const TYPE_EQUAL = 'equal';
+    const TYPE_IN_ARRAY = 'inArray';
+    const TYPE_NOT_IN_ARRAY = 'notInArray';
+    const TYPE_IS_NULL = 'isNull';
+    const TYPE_IS_NOT_NULL = 'isNotNull';
+    const TYPE_LIKE = 'isNotNull';
+    const TYPE_LIKE_LEFT = 'isNotNull';
+    const TYPE_LIKE_RIGHT = 'isNotNull';
+
+    const CONDITION_IN = 'in';
+    const CONDITION_NOT_IN = 'not_in';
+    const CONDITION_IS = 'is';
+    const CONDITION_IS_NOT = 'is_not';
+    const CONDITION_LIKE = 'like';
+    const CONDITION_LIKE_LEFT = 'like_left';
+    const CONDITION_LIKE_RIGHT = 'like_right';
+
     /**
      * @var array
      */
@@ -25,6 +43,19 @@ class Condition
         '>=',
         '<',
         '<=',
+    ];
+
+    /**
+     * @var array
+     */
+    protected $conditions = [
+        self::CONDITION_IN,
+        self::CONDITION_NOT_IN,
+        self::CONDITION_IS,
+        self::CONDITION_IS_NOT,
+        self::CONDITION_LIKE,
+        self::CONDITION_LIKE_LEFT,
+        self::CONDITION_LIKE_RIGHT,
     ];
 
     /**
@@ -89,30 +120,53 @@ class Condition
         $param = key($arg);
         $body = $arg[$param];
         $this->_param = $param;
-        $delimiterPos = strripos($this->param, '.');
-
-        if ($delimiterPos !== false) {
-            $this->_relation = substr($this->param, 0, $delimiterPos);
-            $this->_field = substr($this->param, $delimiterPos + 1);
-        }
 
         if (!is_array($body)) {
-            $this->_type = 'equal';
+            $this->_type = self::TYPE_EQUAL;
             $this->_value = $body;
         } elseif (is_array($body)) {
-            if (key_exists('in', $body)) {
-                $this->_type = 'inArray';
-                $this->_value = $body['in'];
-            } elseif (key_exists('not_in', $body)) {
-                $this->_type = 'notInArray';
-                $this->_value = $body['not_in'];
-            } elseif (key_exists('is', $body)) {
-                $this->_type = 'isNull';
-            } elseif (key_exists('is_not', $body)) {
-                $this->_type = 'isNotNull';
+            if (array_filter(array_keys($body), (function (string $key): bool {
+                return in_array($key, $this->conditions);
+            })->bindTo($this))) {
+                if (key_exists(self::CONDITION_IN, $body)) {
+                    $this->_type = self::TYPE_IN_ARRAY;
+                    $this->_value = $body[self::CONDITION_IN];
+                } elseif (key_exists(self::CONDITION_NOT_IN, $body)) {
+                    $this->_type = self::TYPE_NOT_IN_ARRAY;
+                    $this->_value = $body[self::CONDITION_NOT_IN];
+                } elseif (key_exists(self::CONDITION_IS, $body)) {
+                    $this->_type = self::TYPE_IS_NULL;
+                } elseif (key_exists(self::CONDITION_IS_NOT, $body)) {
+                    $this->_type = self::TYPE_IS_NOT_NULL;
+                } elseif (key_exists(self::CONDITION_LIKE, $body)) {
+                    $this->_type = self::TYPE_LIKE;
+                    $this->_value = $body[self::CONDITION_LIKE];
+                } elseif (key_exists(self::CONDITION_LIKE_LEFT, $body)) {
+                    $this->_type = self::TYPE_LIKE_LEFT;
+                    $this->_value = $body[self::CONDITION_LIKE_LEFT];
+                } elseif (key_exists(self::CONDITION_LIKE_RIGHT, $body)) {
+                    $this->_type = self::TYPE_LIKE_RIGHT;
+                    $this->_value = $body[self::CONDITION_LIKE_RIGHT];
+                }
+            } else {
+                $this->action = function (Builder $builder) use ($body, $param): Builder {
+                    return $builder->whereHas($param, function (Builder $builder) use ($body): void {
+                        foreach ($body as $column => $value) {
+                            $method = (new self([$column => $value]))->action;
+                            $method && $method($builder);
+                        }
+                    });
+                };
+
+                return;
             }
         } else {
-            $this->_type = 'unknown';
+            $this->_type = self::TYPE_UNKNOWN;
+        }
+
+        if (($delimiterPos = strripos($this->param, '.')) !== false) {
+            $this->_relation = substr($this->param, 0, $delimiterPos);
+            $this->_field = substr($this->param, $delimiterPos + 1);
         }
 
         $this->buildAction();
@@ -123,32 +177,45 @@ class Condition
      */
     protected function buildAction(): void
     {
+        $method = 'where';
+        $methodArgs = [$this->value];
         switch ($this->_type) {
-            case 'equal':
-                $method = 'where';
+            case self::TYPE_EQUAL:
                 break;
-            case 'inArray':
+            case self::TYPE_LIKE:
+                $methodArgs = ['%' . $this->value . '%'];
+                break;
+            case self::TYPE_LIKE_LEFT:
+                $methodArgs = ['%' . $this->value];
+                break;
+            case self::TYPE_LIKE_RIGHT:
+                $methodArgs = [$this->value . '%'];
+                break;
+            case self::TYPE_IN_ARRAY:
                 $method = 'whereIn';
                 break;
-            case 'notInArray':
+            case self::TYPE_NOT_IN_ARRAY:
                 $method = 'whereNotIn';
                 break;
-            case 'isNull':
+            case self::TYPE_IS_NULL:
                 $method = 'whereNull';
+                $methodArgs = [];
                 break;
-            case 'isNotNull':
+            case self::TYPE_IS_NOT_NULL:
                 $method = 'whereNotNull';
+                $methodArgs = [];
                 break;
             default:
+                $method = null;
         }
 
         if (isset($method)) {
-            $methodArgs = [$this->value];
-            if (in_array($method, [
-                'whereNull',
-                'whereNotNull',
+            if (in_array($this->_type, [
+                self::TYPE_LIKE,
+                self::TYPE_LIKE_LEFT,
+                self::TYPE_LIKE_RIGHT,
             ])) {
-                $methodArgs = [];
+                array_unshift($methodArgs, 'like');
             }
 
             if ($this->_relation &&
