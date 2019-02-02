@@ -3,6 +3,7 @@
 namespace Fector\Harvest\Helpers;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Class Condition
@@ -183,13 +184,13 @@ class Condition
             case self::TYPE_EQUAL:
                 break;
             case self::TYPE_LIKE:
-                $methodArgs = ['%' . $this->value . '%'];
+                $methodArgs = [DB::raw('LOWER("%' . $this->value . '%")')];
                 break;
             case self::TYPE_LIKE_LEFT:
-                $methodArgs = ['%' . $this->value];
+                $methodArgs = [DB::raw('LOWER("%' . $this->value . '")')];
                 break;
             case self::TYPE_LIKE_RIGHT:
-                $methodArgs = [$this->value . '%'];
+                $methodArgs = [DB::raw('LOWER("' . $this->value . '%")')];
                 break;
             case self::TYPE_IN_ARRAY:
                 $method = 'whereIn';
@@ -218,19 +219,31 @@ class Condition
                 array_unshift($methodArgs, 'like');
             }
 
+            $prop = (function ($field) {
+                if (in_array($this->_type, [
+                    self::TYPE_LIKE,
+                    self::TYPE_LIKE_LEFT,
+                    self::TYPE_LIKE_RIGHT,
+                ])) {
+                    return DB::raw('LOWER(' . $field . ')');
+                }
+
+                return $field;
+            })->bindTo($this);
+
             if ($this->_relation &&
                 $this->_field) {
-                $this->_action = (function (Builder $builder) use ($method, $methodArgs) {
-                    return $builder->whereHas($this->_relation, function (Builder $query) use ($method, $methodArgs) {
-                        array_unshift($methodArgs, $query
+                $this->_action = (function (Builder $builder) use ($method, $methodArgs, $prop): Builder {
+                    return $builder->whereHas($this->_relation, function (Builder $query) use ($method, $methodArgs, $prop): void {
+                        array_unshift($methodArgs, $prop($query
                             ->getModel()
-                            ->getTable() . '.' . $this->_field);
+                            ->getTable() . '.' . $this->_field));
                         $query->{$method}(...$methodArgs);
                     });
                 })->bindTo($this);
             } else {
-                $this->_action = (function (Builder $builder) use ($method, $methodArgs) {
-                    array_unshift($methodArgs, $this->param);
+                $this->_action = (function (Builder $builder) use ($method, $methodArgs, $prop): Builder {
+                    array_unshift($methodArgs, $prop($this->param));
                     return $builder->{$method}(...$methodArgs);
                 })->bindTo($this);
             }
