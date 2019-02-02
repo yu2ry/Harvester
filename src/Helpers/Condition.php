@@ -234,6 +234,12 @@ class Condition
             if ($this->_relation &&
                 $this->_field) {
                 $this->_action = (function (Builder $builder) use ($method, $methodArgs, $prop): Builder {
+                    if ($this->_field === 'has') {
+                        return (bool)$this->value
+                            ? $builder->has($this->_relation)
+                            : $builder->doesntHave($this->_relation);
+                    }
+
                     return $builder->whereHas($this->_relation, function (Builder $query) use ($method, $methodArgs, $prop): void {
                         array_unshift($methodArgs, $prop($query
                             ->getModel()
